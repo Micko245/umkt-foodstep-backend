@@ -1,7 +1,6 @@
 <?php
 header("Content-Type: application/json");
 
-// Menggunakan Server Key milikmu
 $serverKey = "SB-Mid-server-H7PHMOW2JoVCx1cpm45RsNeQ";
 
 $json = file_get_contents('php://input');
@@ -16,48 +15,54 @@ $transactionStatus = $notification['transaction_status'];
 $orderId = $notification['order_id'];
 $fraudStatus = isset($notification['fraud_status']) ? $notification['fraud_status'] : '';
 
-$statusBaru = "";
-
-// Cek status transaksi dari Midtrans
-if ($transactionStatus == 'capture') {
-    if ($fraudStatus == 'challenge') {
-        $statusBaru = "Belum Bayar";
-    } else if ($fraudStatus == 'accept') {
-        $statusBaru = "Sedang Diproses";
-    }
-} else if ($transactionStatus == 'settlement') {
-    $statusBaru = "Sedang Diproses"; // Pembayaran QRIS/Gopay/Transfer VA sukses!
-} else if ($transactionStatus == 'pending') {
-    $statusBaru = "Belum Bayar";
-} else if (in_array($transactionStatus, ['deny', 'expire', 'cancel'])) {
-    $statusBaru = "Gagal";
+// Kita hanya memproses jika status pembayaran benar-benar sukses (settlement atau capture accept)
+$pembayaranSukses = false;
+if ($transactionStatus == 'settlement' || ($transactionStatus == 'capture' && $fraudStatus == 'accept')) {
+    $pembayaranSukses = true;
 }
 
-if (!empty($statusBaru)) {
-    // Menghubungkan ke Firebase Realtime Database punyamu
+if ($pembayaranSukses) {
     $firebaseDatabaseUrl = "https://umktfoodstep-27885-default-rtdb.asia-southeast1.firebasedatabase.app/";
-    $firebaseUrl = $firebaseDatabaseUrl . "orders/" . $orderId . "/status.json";
     
-    // Kirim pembaruan status ke Firebase menggunakan REST API (PUT)
+    // 1. Ambil data pesanan dari simpul sementara /pending_payments/
+    $get_url = $firebaseDatabaseUrl . "pending_payments/" . $orderId . ".json";
     $ch = curl_init();
-    curl_setopt($ch, CURLOPT_URL, $firebaseUrl);
+    curl_setopt($ch, CURLOPT_URL, $get_url);
     curl_setopt($ch, CURLOPT_RETURNTRANSFER, true);
-    curl_setopt($ch, CURLOPT_CUSTOMREQUEST, "PUT");
-    curl_setopt($ch, CURLOPT_POSTFIELDS, json_encode($statusBaru));
-    curl_setopt($ch, CURLOPT_HTTPHEADER, [
-        'Content-Type: application/json'
-    ]);
-    
-    $response = curl_exec($ch);
-    $httpCode = curl_getinfo($ch, CURLINFO_HTTP_CODE);
+    $orderDataJson = curl_exec($ch);
     curl_close($ch);
     
-    if ($httpCode == 200) {
-        echo json_encode(["status" => "success", "message" => "Status pesanan $orderId berhasil di-update ke: $statusBaru"]);
+    $orderData = json_decode($orderDataJson, true);
+    
+    if ($orderData) {
+        // Update status data pesanan tersebut langsung menjadi "Sedang Diproses"
+        $orderData['status'] = "Sedang Diproses";
+        
+        // 2. Tulis data pesanan tersebut ke simpul utama /orders/ (Daftar kerja Penjual)
+        $put_url = $firebaseDatabaseUrl . "orders/" . $orderId . ".json";
+        $ch2 = curl_init();
+        curl_setopt($ch2, CURLOPT_URL, $put_url);
+        curl_setopt($ch2, CURLOPT_RETURNTRANSFER, true);
+        curl_setopt($ch2, CURLOPT_CUSTOMREQUEST, "PUT");
+        curl_setopt($ch2, CURLOPT_POSTFIELDS, json_encode($orderData));
+        curl_setopt($ch2, CURLOPT_HTTPHEADER, ['Content-Type: application/json']);
+        curl_exec($ch2);
+        curl_close($ch2);
+        
+        // 3. Hapus data pesanan dari simpul sementara /pending_payments/ agar bersih
+        $delete_url = $firebaseDatabaseUrl . "pending_payments/" . $orderId . ".json";
+        $ch3 = curl_init();
+        curl_setopt($ch3, CURLOPT_URL, $delete_url);
+        curl_setopt($ch3, CURLOPT_RETURNTRANSFER, true);
+        curl_setopt($ch3, CURLOPT_CUSTOMREQUEST, "DELETE");
+        curl_exec($ch3);
+        curl_close($ch3);
+        
+        echo json_encode(["status" => "success", "message" => "Pesanan $orderId sukses dipindahkan ke /orders/ dengan status Sedang Diproses."]);
     } else {
-        echo json_encode(["status" => "error", "message" => "Gagal mengupdate database Firebase."]);
+        echo json_encode(["status" => "error", "message" => "Data di pending_payments tidak ditemukan."]);
     }
 } else {
-    echo json_encode(["status" => "ignored", "message" => "Status diabaikan."]);
+    echo json_encode(["status" => "ignored", "message" => "Transaksi belum sukses / pending."]);
 }
 ?>
