@@ -15,7 +15,7 @@ $transactionStatus = $notification['transaction_status'];
 $orderId = $notification['order_id'];
 $fraudStatus = isset($notification['fraud_status']) ? $notification['fraud_status'] : '';
 
-// Kita hanya memproses jika status pembayaran benar-benar sukses (settlement atau capture accept)
+// 1. Validasi status pembayaran sukses dari Midtrans
 $pembayaranSukses = false;
 if ($transactionStatus == 'settlement' || ($transactionStatus == 'capture' && $fraudStatus == 'accept')) {
     $pembayaranSukses = true;
@@ -24,8 +24,9 @@ if ($transactionStatus == 'settlement' || ($transactionStatus == 'capture' && $f
 if ($pembayaranSukses) {
     $firebaseDatabaseUrl = "https://umktfoodstep-27885-default-rtdb.asia-southeast1.firebasedatabase.app/";
     
-    // 1. Ambil data pesanan dari simpul sementara /pending_payments/
-    $get_url = $firebaseDatabaseUrl . "pending_payments/" . $orderId . ".json";
+    // SESUAI HP ANDROID: Kita cari dan update langsung data di node /order_items/
+    $get_url = $firebaseDatabaseUrl . "order_items/" . $orderId . ".json";
+    
     $ch = curl_init();
     curl_setopt($ch, CURLOPT_URL, $get_url);
     curl_setopt($ch, CURLOPT_RETURNTRANSFER, true);
@@ -35,11 +36,11 @@ if ($pembayaranSukses) {
     $orderData = json_decode($orderDataJson, true);
     
     if ($orderData) {
-        // Update status data pesanan tersebut langsung menjadi "Sedang Diproses"
+        // 2. Ubah status pesanan di Firebase menjadi "Sedang Diproses" (atau "Sudah Bayar" sesuai kebutuhan sistemmu)
         $orderData['status'] = "Sedang Diproses";
         
-        // 2. Tulis data pesanan tersebut ke simpul utama /orders/ (Daftar kerja Penjual)
-        $put_url = $firebaseDatabaseUrl . "orders/" . $orderId . ".json";
+        // 3. Simpan kembali data yang sudah di-update ke dalam node /order_items/ ID tersebut
+        $put_url = $firebaseDatabaseUrl . "order_items/" . $orderId . ".json";
         $ch2 = curl_init();
         curl_setopt($ch2, CURLOPT_URL, $put_url);
         curl_setopt($ch2, CURLOPT_RETURNTRANSFER, true);
@@ -49,20 +50,33 @@ if ($pembayaranSukses) {
         curl_exec($ch2);
         curl_close($ch2);
         
-        // 3. Hapus data pesanan dari simpul sementara /pending_payments/ agar bersih
-        $delete_url = $firebaseDatabaseUrl . "pending_payments/" . $orderId . ".json";
+        echo json_encode([
+            "status" => "success", 
+            "message" => "Pesanan $orderId berhasil diperbarui di /order_items/ dengan status Sedang Diproses."
+        ]);
+    } else {
+        echo json_encode([
+            "status" => "error", 
+            "message" => "Data order $orderId tidak ditemukan di node order_items."
+        ]);
+    }
+} else {
+    // Menangani kondisi jika transaksi digagalkan/expired/dibatalkan oleh pengguna
+    if ($transactionStatus == 'cancel' || $transactionStatus == 'deny' || $transactionStatus == 'expire') {
+        $firebaseDatabaseUrl = "https://umktfoodstep-27885-default-rtdb.asia-southeast1.firebasedatabase.app/";
+        $delete_url = $firebaseDatabaseUrl . "order_items/" . $orderId . ".json";
+        
+        // Hapus draf transaksi gagal dari database agar tidak menumpuk sampah pesanan
         $ch3 = curl_init();
         curl_setopt($ch3, CURLOPT_URL, $delete_url);
         curl_setopt($ch3, CURLOPT_RETURNTRANSFER, true);
         curl_setopt($ch3, CURLOPT_CUSTOMREQUEST, "DELETE");
         curl_exec($ch3);
         curl_close($ch3);
-        
-        echo json_encode(["status" => "success", "message" => "Pesanan $orderId sukses dipindahkan ke /orders/ dengan status Sedang Diproses."]);
+
+        echo json_encode(["status" => "failed", "message" => "Transaksi $orderId gagal/dibatalkan. Data dihapus dari database."]);
     } else {
-        echo json_encode(["status" => "error", "message" => "Data di pending_payments tidak ditemukan."]);
+        echo json_encode(["status" => "ignored", "message" => "Transaksi pending atau status tidak dikenal."]);
     }
-} else {
-    echo json_encode(["status" => "ignored", "message" => "Transaksi belum sukses / pending."]);
 }
 ?>
