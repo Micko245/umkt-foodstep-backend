@@ -18,20 +18,31 @@ if (!isset($data['order_id']) || !isset($data['total_price'])) {
 $orderId = $data['order_id'];
 $totalPrice = (int)$data['total_price'];
 
-// Payload transaksi Midtrans
+// 1. Detail Transaksi Utama
 $transaction_details = [
     'order_id' => $orderId,
     'gross_amount' => $totalPrice,
 ];
 
+// 2. Detail Pelanggan (Formalitas)
 $customer_details = [
     'first_name' => "Mahasiswa UMKT",
     'email' => "mahasiswa@umkt.ac.id"
 ];
 
+// =========================================================================
+// KUNCI UTAMA: Mengubah Tombol Kembali & Auto Close Pop-up saat Sukses
+// =========================================================================
+$callbacks = [
+    // Saat pembayaran berhasil (finish), Midtrans SDK akan otomatis menutup pop-up 
+    // secara instan tanpa memaksa user mengklik tombol secara manual.
+    'finish' => "https://umktfoodstep-27885-default-rtdb.asia-southeast1.firebasedatabase.app/"
+];
+
 $transaction_data = [
     'transaction_details' => $transaction_details,
-    'customer_details' => $customer_details
+    'customer_details' => $customer_details,
+    'callbacks' => $callbacks // Menyisipkan custom callback ke dalam payload request Midtrans
 ];
 
 $payload = json_encode($transaction_data);
@@ -52,5 +63,6 @@ curl_setopt($ch, CURLOPT_HTTPHEADER, [
 $response = curl_exec($ch);
 curl_close($ch);
 
+// Kembalikan token ke Android
 echo $response;
 ?>
