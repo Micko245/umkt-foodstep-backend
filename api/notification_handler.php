@@ -52,41 +52,13 @@ if ($pembayaranSukses) {
         $kantinId = isset($pendingData['kantin_id']) ? (int)$pendingData['kantin_id'] : 1;
 
         // =========================================================================
-        // STEP 2 : CARI NAMA KANTIN
-        // =========================================================================
-        $kantinName = "Kantin";
-        $getKantinUrl = $firebaseDatabaseUrl . "kantins.json";
-
-        $chKantin = curl_init();
-        curl_setopt($chKantin, CURLOPT_URL, $getKantinUrl);
-        curl_setopt($chKantin, CURLOPT_RETURNTRANSFER, true);
-        $kantinJson = curl_exec($chKantin);
-        curl_close($chKantin);
-
-        $kantins = json_decode($kantinJson, true);
-
-        if (is_array($kantins)) {
-            foreach ($kantins as $kantin) {
-                if (
-                    isset($kantin['id']) &&
-                    (int)$kantin['id'] === $kantinId
-                ) {
-                    $kantinName = $kantin['name'];
-                    break;
-                }
-            }
-        }
-
-        // =========================================================================
-        // STEP 3 : SIMPAN ORDER (Hanya Informasi Utama Tanpa Array "items")
+        // STEP 2 : SIMPAN ORDER (Sangat Bersih & Hanya Menyimpan ID Referensi)
         // =========================================================================
         $newOrder = [
             "id" => $orderId,
             "user_id" => $userId,
             "kantin_id" => $kantinId,
-            "kantin" => $kantinName,
-            "payment_method" => "Midtrans",
-            "payment_method_id" => 3, // Ditambahkan agar sesuai skema target
+            "payment_method_id" => 1, // 🛠️ Langsung di-set ke 1 (Midtrans)
             "status" => "Diproses",
             "subtotal" => (int)$pendingData['subtotal'],
             "service_fee" => (int)$pendingData['service_fee'],
@@ -99,7 +71,6 @@ if ($pembayaranSukses) {
         ];
 
         $chOrder = curl_init();
-        // Menggunakan PUT dengan OrderID sebagai key agar data tidak menghasilkan key random otomatis Firebase (-OsCU3...)
         curl_setopt(
             $chOrder,
             CURLOPT_URL,
@@ -121,13 +92,13 @@ if ($pembayaranSukses) {
         curl_close($chOrder);
 
         // =========================================================================
-        // STEP 4 : SIMPAN ORDER ITEMS (Dipecah Masuk ke Node "order_items")
+        // STEP 3 : SIMPAN ORDER ITEMS
         // =========================================================================
         $itemCounter = 1;
         foreach ($cartItems as $item) {
 
             $singleItem = [
-                "id" => $itemCounter, // Nomor urut item di dalam struk pembelian
+                "id" => $itemCounter,
                 "menu_item_id" => (int)$item['menu_item_id'],
                 "name_snapshot" => $item['name_snapshot'],
                 "order_id" => $orderId,
@@ -137,7 +108,6 @@ if ($pembayaranSukses) {
             ];
 
             $chItem = curl_init();
-            // Disimpan dengan key unik gabungan OrderID dan nomor item agar rapi
             curl_setopt(
                 $chItem,
                 CURLOPT_URL,
@@ -162,7 +132,7 @@ if ($pembayaranSukses) {
         }
 
         // =========================================================================
-        // STEP 5 : BUAT NOTIFIKASI
+        // STEP 4 : BUAT NOTIFIKASI
         // =========================================================================
         $orderedAt = gmdate("Y-m-d\TH:i:s\Z");
         $notifId = "NOTIF-" . time();
@@ -179,7 +149,6 @@ if ($pembayaranSukses) {
         ];
 
         $chNotif = curl_init();
-        // Disimpan dengan key $notifId agar terstruktur
         curl_setopt(
             $chNotif,
             CURLOPT_URL,
@@ -201,7 +170,7 @@ if ($pembayaranSukses) {
         curl_close($chNotif);
 
         // =========================================================================
-        // STEP 6 : HAPUS PENDING PAYMENT
+        // STEP 5 : HAPUS PENDING PAYMENT
         // =========================================================================
         $delete_url = $firebaseDatabaseUrl . "pending_payments/" . $orderId . ".json";
 
@@ -214,7 +183,7 @@ if ($pembayaranSukses) {
 
         echo json_encode([
             "status" => "success",
-            "message" => "Pesanan berhasil dipisahkan ke orders, order_items, & notifications"
+            "message" => "Pesanan berhasil diproses dengan struktur minimalis."
         ]);
 
     } else {
