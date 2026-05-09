@@ -30,19 +30,10 @@ $customer_details = [
     'email' => "mahasiswa@umkt.ac.id"
 ];
 
-// =========================================================================
-// KUNCI UTAMA: Mengubah Tombol Kembali & Auto Close Pop-up saat Sukses
-// =========================================================================
-$callbacks = [
-    // Saat pembayaran berhasil (finish), Midtrans SDK akan otomatis menutup pop-up 
-    // secara instan tanpa memaksa user mengklik tombol secara manual.
-    'finish' => "https://umktfoodstep-27885-default-rtdb.asia-southeast1.firebasedatabase.app/"
-];
-
+// SOLUSI: Hapus callbacks agar SDK kembali ke pengaturan default native Android
 $transaction_data = [
     'transaction_details' => $transaction_details,
-    'customer_details' => $customer_details,
-    'callbacks' => $callbacks // Menyisipkan custom callback ke dalam payload request Midtrans
+    'customer_details' => $customer_details
 ];
 
 $payload = json_encode($transaction_data);
