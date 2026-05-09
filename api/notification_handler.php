@@ -1,21 +1,27 @@
 <?php
+
 header("Content-Type: application/json");
 
 $serverKey = "SB-Mid-server-H7PHMOW2JoVCx1cpm45RsNeQ";
 
 $json = file_get_contents('php://input');
+
 $notification = json_decode($json, true);
 
 if (!$notification) {
+
     echo json_encode([
         "status" => "error",
         "message" => "Tidak ada data notifikasi masuk."
     ]);
+
     exit();
 }
 
 $transactionStatus = $notification['transaction_status'];
+
 $orderId = $notification['order_id'];
+
 $fraudStatus = isset($notification['fraud_status'])
     ? $notification['fraud_status']
     : '';
@@ -35,7 +41,7 @@ if ($pembayaranSukses) {
         "https://umktfoodstep-27885-default-rtdb.asia-southeast1.firebasedatabase.app/";
 
     // =========================================================================
-    // STEP 1: AMBIL DATA DARI PENDING PAYMENTS
+    // STEP 1 : AMBIL DATA PENDING PAYMENT
     // =========================================================================
 
     $get_url =
@@ -64,130 +70,125 @@ if ($pembayaranSukses) {
                 ? $pendingData['user_id']
                 : "USR-001";
 
+        $kantinId =
+            isset($pendingData['kantin_id'])
+                ? (int)$pendingData['kantin_id']
+                : 1;
+
         // =========================================================================
-        // STEP 2: MASUKKAN DATA KE NODE /orders/
+        // STEP 2 : CARI NAMA KANTIN
         // =========================================================================
 
-        $get_orders_url =
-            $firebaseDatabaseUrl . "orders.json";
+        $kantinName = "Kantin";
 
-        $ch_order = curl_init();
+        $getKantinUrl =
+            $firebaseDatabaseUrl . "kantins.json";
 
-        curl_setopt($ch_order, CURLOPT_URL, $get_orders_url);
-        curl_setopt($ch_order, CURLOPT_RETURNTRANSFER, true);
+        $chKantin = curl_init();
 
-        $existOrdersJson = curl_exec($ch_order);
+        curl_setopt($chKantin, CURLOPT_URL, $getKantinUrl);
+        curl_setopt($chKantin, CURLOPT_RETURNTRANSFER, true);
 
-        curl_close($ch_order);
+        $kantinJson = curl_exec($chKantin);
 
-        $existOrders =
-            json_decode($existOrdersJson, true);
+        curl_close($chKantin);
 
-        $nextOrderIndex = 0;
+        $kantins = json_decode($kantinJson, true);
 
-        if (is_array($existOrders)) {
-            $nextOrderIndex = count($existOrders);
+        if (is_array($kantins)) {
+
+            foreach ($kantins as $kantin) {
+
+                if (
+                    isset($kantin['id']) &&
+                    (int)$kantin['id'] === $kantinId
+                ) {
+                    $kantinName = $kantin['name'];
+                    break;
+                }
+            }
         }
 
+        // =========================================================================
+        // STEP 3 : SIMPAN ORDER
+        // =========================================================================
+
         $newOrder = [
-            $nextOrderIndex => [
 
-                "id" => $orderId,
+            "id" => $orderId,
 
-                "user_id" => $userId,
+            "user_id" => $userId,
 
-                "kantin_id" =>
-                    (int)$pendingData['kantin_id'],
+            "kantin_id" => $kantinId,
 
-                "payment_method_id" => 1,
+            "kantin" => $kantinName,
 
-                "status" => "Diproses",
+            "payment_method" => "Midtrans",
 
-                "subtotal" =>
-                    (int)$pendingData['subtotal'],
+            "status" => "Diproses",
 
-                "service_fee" =>
-                    (int)$pendingData['service_fee'],
+            "subtotal" =>
+                (int)$pendingData['subtotal'],
 
-                "total" =>
-                    (int)$pendingData['total'],
+            "service_fee" =>
+                (int)$pendingData['service_fee'],
 
-                "note" =>
-                    isset($pendingData['note'])
-                        ? $pendingData['note']
-                        : "",
+            "total" =>
+                (int)$pendingData['total'],
 
-                "pickup_code" =>
-                    $pendingData['pickup_code'],
+            "note" =>
+                isset($pendingData['note'])
+                    ? $pendingData['note']
+                    : "",
 
-                "ordered_at" =>
-                    $pendingData['ordered_at'],
+            "pickup_code" =>
+                $pendingData['pickup_code'],
 
-                "ready_at" => null,
+            "ordered_at" =>
+                $pendingData['ordered_at'],
 
-                "completed_at" => null
-            ]
+            "ready_at" => null,
+
+            "completed_at" => null,
+
+            "items" => $cartItems
         ];
 
-        $put_orders_url =
-            $firebaseDatabaseUrl . "orders.json";
-
-        $ch_order_put = curl_init();
-
-        curl_setopt($ch_order_put, CURLOPT_URL, $put_orders_url);
-        curl_setopt($ch_order_put, CURLOPT_RETURNTRANSFER, true);
-        curl_setopt($ch_order_put, CURLOPT_CUSTOMREQUEST, "PATCH");
+        $chOrder = curl_init();
 
         curl_setopt(
-            $ch_order_put,
+            $chOrder,
+            CURLOPT_URL,
+            $firebaseDatabaseUrl . "orders.json"
+        );
+
+        curl_setopt($chOrder, CURLOPT_POST, true);
+
+        curl_setopt(
+            $chOrder,
             CURLOPT_POSTFIELDS,
             json_encode($newOrder)
         );
 
         curl_setopt(
-            $ch_order_put,
+            $chOrder,
             CURLOPT_HTTPHEADER,
             ['Content-Type: application/json']
         );
 
-        curl_exec($ch_order_put);
+        curl_setopt($chOrder, CURLOPT_RETURNTRANSFER, true);
 
-        curl_close($ch_order_put);
+        curl_exec($chOrder);
+
+        curl_close($chOrder);
 
         // =========================================================================
-        // STEP 3: MASUKKAN ITEM BELANJA KE NODE /order_items/
+        // STEP 4 : SIMPAN ORDER ITEMS
         // =========================================================================
-
-        $get_items_url =
-            $firebaseDatabaseUrl . "order_items.json";
-
-        $ch_get = curl_init();
-
-        curl_setopt($ch_get, CURLOPT_URL, $get_items_url);
-        curl_setopt($ch_get, CURLOPT_RETURNTRANSFER, true);
-
-        $existItemsJson = curl_exec($ch_get);
-
-        curl_close($ch_get);
-
-        $existItems =
-            json_decode($existItemsJson, true);
-
-        $nextIndex = 0;
-
-        if (is_array($existItems)) {
-            $nextIndex = count($existItems);
-        }
-
-        $itemsToSave = [];
-
-        $currentIndex = $nextIndex;
 
         foreach ($cartItems as $item) {
 
-            $itemsToSave[$currentIndex] = [
-
-                "id" => $currentIndex + 1,
+            $singleItem = [
 
                 "menu_item_id" =>
                     (int)$item['menu_item_id'],
@@ -207,117 +208,96 @@ if ($pembayaranSukses) {
                     (int)$item['subtotal']
             ];
 
-            $currentIndex++;
+            $chItem = curl_init();
+
+            curl_setopt(
+                $chItem,
+                CURLOPT_URL,
+                $firebaseDatabaseUrl . "order_items.json"
+            );
+
+            curl_setopt($chItem, CURLOPT_POST, true);
+
+            curl_setopt(
+                $chItem,
+                CURLOPT_POSTFIELDS,
+                json_encode($singleItem)
+            );
+
+            curl_setopt(
+                $chItem,
+                CURLOPT_HTTPHEADER,
+                ['Content-Type: application/json']
+            );
+
+            curl_setopt($chItem, CURLOPT_RETURNTRANSFER, true);
+
+            curl_exec($chItem);
+
+            curl_close($chItem);
         }
 
-        $put_items_url =
-            $firebaseDatabaseUrl . "order_items.json";
-
-        $ch_put = curl_init();
-
-        curl_setopt($ch_put, CURLOPT_URL, $put_items_url);
-        curl_setopt($ch_put, CURLOPT_RETURNTRANSFER, true);
-        curl_setopt($ch_put, CURLOPT_CUSTOMREQUEST, "PATCH");
-
-        curl_setopt(
-            $ch_put,
-            CURLOPT_POSTFIELDS,
-            json_encode($itemsToSave)
-        );
-
-        curl_setopt(
-            $ch_put,
-            CURLOPT_HTTPHEADER,
-            ['Content-Type: application/json']
-        );
-
-        curl_exec($ch_put);
-
-        curl_close($ch_put);
-
         // =========================================================================
-        // STEP 4: BUAT NOTIFIKASI BARU
+        // STEP 5 : BUAT NOTIFIKASI
         // =========================================================================
-
-        $get_notif_url =
-            $firebaseDatabaseUrl . "notifications.json";
-
-        $ch_notif = curl_init();
-
-        curl_setopt($ch_notif, CURLOPT_URL, $get_notif_url);
-        curl_setopt($ch_notif, CURLOPT_RETURNTRANSFER, true);
-
-        $existNotifJson = curl_exec($ch_notif);
-
-        curl_close($ch_notif);
-
-        $existNotif =
-            json_decode($existNotifJson, true);
-
-        $nextNotifIndex = 0;
-
-        if (is_array($existNotif)) {
-            $nextNotifIndex = count($existNotif);
-        }
 
         $orderedAt =
             gmdate("Y-m-d\TH:i:s\Z");
 
         $newNotification = [
 
-            $nextNotifIndex => [
+            "id" =>
+                "NOTIF-" . time(),
 
-                "id" =>
-                    "NOTIF-" .
-                    ($nextNotifIndex + 1),
+            "user_id" => $userId,
 
-                "order_id" => $orderId,
+            "order_id" => $orderId,
 
-                "user_id" => $userId,
+            "type" => "order_process",
 
-                "title" =>
-                    "Pesanan Sedang Diproses",
+            "title" =>
+                "Pesanan Sedang Diproses",
 
-                "body" =>
-                    "Pesanan #" .
-                    $orderId .
-                    " sedang diproses oleh kantin.",
+            "body" =>
+                "Pesanan #" .
+                $orderId .
+                " sedang diproses oleh kantin.",
 
-                "type" => "order_process",
+            "is_read" => false,
 
-                "is_read" => false,
-
-                "created_at" => $orderedAt
-            ]
+            "created_at" => $orderedAt
         ];
 
-        $put_notif_url =
-            $firebaseDatabaseUrl . "notifications.json";
-
-        $ch_notif_put = curl_init();
-
-        curl_setopt($ch_notif_put, CURLOPT_URL, $put_notif_url);
-        curl_setopt($ch_notif_put, CURLOPT_RETURNTRANSFER, true);
-        curl_setopt($ch_notif_put, CURLOPT_CUSTOMREQUEST, "PATCH");
+        $chNotif = curl_init();
 
         curl_setopt(
-            $ch_notif_put,
+            $chNotif,
+            CURLOPT_URL,
+            $firebaseDatabaseUrl . "notifications.json"
+        );
+
+        curl_setopt($chNotif, CURLOPT_POST, true);
+
+        curl_setopt(
+            $chNotif,
             CURLOPT_POSTFIELDS,
             json_encode($newNotification)
         );
 
         curl_setopt(
-            $ch_notif_put,
+            $chNotif,
             CURLOPT_HTTPHEADER,
             ['Content-Type: application/json']
         );
 
-        curl_exec($ch_notif_put);
+        curl_setopt($chNotif, CURLOPT_RETURNTRANSFER, true);
 
-        curl_close($ch_notif_put);
+        curl_exec($chNotif);
+
+        curl_close($chNotif);
 
         // =========================================================================
-        // STEP 5: HAPUS DATA PENDING PAYMENT
+        // STEP 6 : HAPUS PENDING PAYMENT
         // =========================================================================
 
         $delete_url =
@@ -326,20 +306,22 @@ if ($pembayaranSukses) {
             $orderId .
             ".json";
 
-        $ch_del = curl_init();
+        $chDel = curl_init();
 
-        curl_setopt($ch_del, CURLOPT_URL, $delete_url);
-        curl_setopt($ch_del, CURLOPT_RETURNTRANSFER, true);
-        curl_setopt($ch_del, CURLOPT_CUSTOMREQUEST, "DELETE");
+        curl_setopt($chDel, CURLOPT_URL, $delete_url);
 
-        curl_exec($ch_del);
+        curl_setopt($chDel, CURLOPT_CUSTOMREQUEST, "DELETE");
 
-        curl_close($ch_del);
+        curl_setopt($chDel, CURLOPT_RETURNTRANSFER, true);
+
+        curl_exec($chDel);
+
+        curl_close($chDel);
 
         echo json_encode([
             "status" => "success",
             "message" =>
-                "Pesanan $orderId sukses diproses!"
+                "Pesanan berhasil masuk ke orders & notifications"
         ]);
 
     } else {
@@ -347,7 +329,7 @@ if ($pembayaranSukses) {
         echo json_encode([
             "status" => "error",
             "message" =>
-                "Draft belanjaan tidak ditemukan."
+                "Pending payment tidak ditemukan."
         ]);
     }
 
@@ -368,19 +350,22 @@ if ($pembayaranSukses) {
             $orderId .
             ".json";
 
-        $ch_del = curl_init();
+        $chDel = curl_init();
 
-        curl_setopt($ch_del, CURLOPT_URL, $delete_url);
-        curl_setopt($ch_del, CURLOPT_CUSTOMREQUEST, "DELETE");
+        curl_setopt($chDel, CURLOPT_URL, $delete_url);
 
-        curl_exec($ch_del);
+        curl_setopt($chDel, CURLOPT_CUSTOMREQUEST, "DELETE");
 
-        curl_close($ch_del);
+        curl_setopt($chDel, CURLOPT_RETURNTRANSFER, true);
+
+        curl_exec($chDel);
+
+        curl_close($chDel);
 
         echo json_encode([
             "status" => "failed",
             "message" =>
-                "Transaksi $orderId gagal/dibatalkan."
+                "Pembayaran gagal / dibatalkan."
         ]);
 
     } else {
@@ -388,7 +373,7 @@ if ($pembayaranSukses) {
         echo json_encode([
             "status" => "ignored",
             "message" =>
-                "Transaksi pending atau status tidak dikenal."
+                "Status transaksi tidak diproses."
         ]);
     }
 }
