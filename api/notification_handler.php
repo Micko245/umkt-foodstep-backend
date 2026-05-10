@@ -218,77 +218,107 @@ if ($pembayaranSukses) {
             // =========================================================================
             // STEP 3 : SIMPAN ORDER ITEMS
             // =========================================================================
-
+            
+            $orderItemCountUrl =
+                $firebaseDatabaseUrl .
+                "order_items.json";
+            
+            $chItemCount = curl_init();
+            
+            curl_setopt(
+                $chItemCount,
+                CURLOPT_URL,
+                $orderItemCountUrl
+            );
+            
+            curl_setopt(
+                $chItemCount,
+                CURLOPT_RETURNTRANSFER,
+                true
+            );
+            
+            $orderItemJson =
+                curl_exec($chItemCount);
+            
+            curl_close($chItemCount);
+            
+            $orderItemData =
+                json_decode($orderItemJson, true);
+            
+            $orderItemIndex = 0;
+            
+            if ($orderItemData && is_array($orderItemData)) {
+                $orderItemIndex = count($orderItemData);
+            }
+            
             $itemCounter = 1;
-
+            
             foreach ($cartItems as $item) {
-
+            
                 $singleItem = [
-
+            
                     "id" => $itemCounter,
-
+            
                     "menu_item_id" =>
                         (int)$item['menu_item_id'],
-
+            
                     "name_snapshot" =>
                         $item['name_snapshot'],
-
+            
                     "order_id" => $orderId,
-
+            
                     "price_snapshot" =>
                         (int)$item['price_snapshot'],
-
+            
                     "quantity" =>
                         (int)$item['quantity'],
-
+            
                     "subtotal" =>
                         (int)$item['subtotal']
                 ];
-
+            
                 $chItem = curl_init();
-
+            
                 curl_setopt(
                     $chItem,
                     CURLOPT_URL,
                     $firebaseDatabaseUrl .
                         "order_items/" .
-                        $count .
-                        "_" .
-                        $itemCounter .
+                        $orderItemIndex .
                         ".json"
                 );
-
+            
                 curl_setopt(
                     $chItem,
                     CURLOPT_CUSTOMREQUEST,
                     "PUT"
                 );
-
+            
                 curl_setopt(
                     $chItem,
                     CURLOPT_POSTFIELDS,
                     json_encode($singleItem)
                 );
-
+            
                 curl_setopt(
                     $chItem,
                     CURLOPT_HTTPHEADER,
                     ['Content-Type: application/json']
                 );
-
+            
                 curl_setopt(
                     $chItem,
                     CURLOPT_RETURNTRANSFER,
                     true
                 );
-
+            
                 curl_exec($chItem);
-
+            
                 curl_close($chItem);
-
+            
                 $itemCounter++;
+                $orderItemIndex++;
             }
-
             // =========================================================================
             // AUTO INDEX NOTIFICATIONS
             // =========================================================================
