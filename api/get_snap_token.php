@@ -11,12 +11,26 @@ $json = file_get_contents('php://input');
 $data = json_decode($json, true);
 
 if (!isset($data['order_id']) || !isset($data['total_price'])) {
-    echo json_encode(["status" => "error", "message" => "Parameter order_id atau total_price tidak lengkap."]);
+    echo json_encode([
+        "status" => "error", 
+        "token" => "", 
+        "message" => "Parameter order_id atau total_price tidak lengkap."
+    ]);
     exit();
 }
 
 $orderId = $data['order_id'];
 $totalPrice = (int)$data['total_price'];
+
+// Validasi nominal transaksi tidak boleh 0 atau minus
+if ($totalPrice <= 0) {
+    echo json_encode([
+        "status" => "error",
+        "token" => "",
+        "message" => "Nominal total_price tidak valid ($totalPrice)."
+    ]);
+    exit();
+}
 
 // 1. Detail Transaksi Utama
 $transaction_details = [
@@ -30,7 +44,6 @@ $customer_details = [
     'email' => "mahasiswa@umkt.ac.id"
 ];
 
-// SOLUSI: Hapus callbacks agar SDK kembali ke pengaturan default native Android
 $transaction_data = [
     'transaction_details' => $transaction_details,
     'customer_details' => $customer_details
@@ -52,8 +65,21 @@ curl_setopt($ch, CURLOPT_HTTPHEADER, [
 ]);
 
 $response = curl_exec($ch);
+$httpCode = curl_getinfo($ch, CURLINFO_HTTP_CODE);
 curl_close($ch);
 
-// Kembalikan token ke Android
-echo $response;
+// JIKA terjadi error HTTP dari Midtrans (misal Server Key Salah, responnya kode 401 atau 400)
+if ($httpCode !== 201 && $httpCode !== 200) {
+    $errorMsg = json_decode($response, true);
+    $detailError = isset($errorMsg['error_messages'][0]) ? $errorMsg['error_messages'][0] : "Otorisasi ditolak / Parameter salah.";
+    
+    echo json_encode([
+        "status" => "error",
+        "token" => "",
+        "message" => "Midtrans Error ($httpCode): " . $detailError
+    ]);
+} else {
+    // Sukses, kembalikan response token asli dari Midtrans ke Android
+    echo $response;
+}
 ?>
