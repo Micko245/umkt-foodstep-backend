@@ -23,12 +23,6 @@ $transactionStatus = $notification['transaction_status'];
 // =====================================================
 // FIX ORDER ID MIDTRANS
 // =====================================================
-// Midtrans mengirim:
-// FS-001-174690123456
-//
-// Kita ubah kembali jadi:
-// FS-001
-// =====================================================
 
 $rawOrderId = $notification['order_id'];
 
@@ -57,7 +51,7 @@ $firebaseDatabaseUrl =
 if ($pembayaranSukses) {
 
     // =========================================================================
-    // STEP 1 : CARI DATA PENDING PAYMENT BERDASARKAN ID CANTIK
+    // STEP 1 : CARI DATA PENDING PAYMENT
     // =========================================================================
 
     $query_url =
@@ -104,6 +98,43 @@ if ($pembayaranSukses) {
                 isset($pendingData['kantin_id'])
                     ? (int)$pendingData['kantin_id']
                     : 1;
+
+            // =========================================================================
+            // AUTO INDEX ORDERS
+            // =========================================================================
+
+            $orderCountUrl =
+                $firebaseDatabaseUrl .
+                "orders.json";
+
+            $chCount = curl_init();
+
+            curl_setopt(
+                $chCount,
+                CURLOPT_URL,
+                $orderCountUrl
+            );
+
+            curl_setopt(
+                $chCount,
+                CURLOPT_RETURNTRANSFER,
+                true
+            );
+
+            $orderCountJson =
+                curl_exec($chCount);
+
+            curl_close($chCount);
+
+            $orderData =
+                json_decode($orderCountJson, true);
+
+            $orderIndex = 1;
+
+            if ($orderData && is_array($orderData)) {
+                $orderIndex =
+                    count($orderData) + 1;
+            }
 
             // =========================================================================
             // STEP 2 : SIMPAN ORDER
@@ -153,7 +184,7 @@ if ($pembayaranSukses) {
                 CURLOPT_URL,
                 $firebaseDatabaseUrl .
                     "orders/" .
-                    $orderId .
+                    $orderIndex .
                     ".json"
             );
 
@@ -222,8 +253,8 @@ if ($pembayaranSukses) {
                     CURLOPT_URL,
                     $firebaseDatabaseUrl .
                         "order_items/" .
-                        $orderId .
-                        "_item_" .
+                        $orderIndex .
+                        "_" .
                         $itemCounter .
                         ".json"
                 );
@@ -257,6 +288,43 @@ if ($pembayaranSukses) {
                 curl_close($chItem);
 
                 $itemCounter++;
+            }
+
+            // =========================================================================
+            // AUTO INDEX NOTIFICATIONS
+            // =========================================================================
+
+            $notifCountUrl =
+                $firebaseDatabaseUrl .
+                "notifications.json";
+
+            $chNotifCount = curl_init();
+
+            curl_setopt(
+                $chNotifCount,
+                CURLOPT_URL,
+                $notifCountUrl
+            );
+
+            curl_setopt(
+                $chNotifCount,
+                CURLOPT_RETURNTRANSFER,
+                true
+            );
+
+            $notifJson =
+                curl_exec($chNotifCount);
+
+            curl_close($chNotifCount);
+
+            $notifData =
+                json_decode($notifJson, true);
+
+            $notifIndex = 1;
+
+            if ($notifData && is_array($notifData)) {
+                $notifIndex =
+                    count($notifData) + 1;
             }
 
             // =========================================================================
@@ -299,7 +367,7 @@ if ($pembayaranSukses) {
                 CURLOPT_URL,
                 $firebaseDatabaseUrl .
                     "notifications/" .
-                    $notifId .
+                    $notifIndex .
                     ".json"
             );
 
@@ -474,4 +542,5 @@ if ($pembayaranSukses) {
         ]);
     }
 }
+
 ?>
