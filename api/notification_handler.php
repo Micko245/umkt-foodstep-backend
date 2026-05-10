@@ -129,11 +129,10 @@ if ($pembayaranSukses) {
             $orderData =
                 json_decode($orderCountJson, true);
 
-            $orderIndex = 1;
+            $count = 0;
 
             if ($orderData && is_array($orderData)) {
-                $orderIndex =
-                    count($orderData) + 1;
+                $count = count($orderData);
             }
 
             // =========================================================================
@@ -184,7 +183,7 @@ if ($pembayaranSukses) {
                 CURLOPT_URL,
                 $firebaseDatabaseUrl .
                     "orders/" .
-                    $orderIndex .
+                    $count .
                     ".json"
             );
 
@@ -253,7 +252,7 @@ if ($pembayaranSukses) {
                     CURLOPT_URL,
                     $firebaseDatabaseUrl .
                         "order_items/" .
-                        $orderIndex .
+                        $count .
                         "_" .
                         $itemCounter .
                         ".json"
@@ -320,11 +319,10 @@ if ($pembayaranSukses) {
             $notifData =
                 json_decode($notifJson, true);
 
-            $notifIndex = 1;
+            $notifCount = 0;
 
             if ($notifData && is_array($notifData)) {
-                $notifIndex =
-                    count($notifData) + 1;
+                $notifCount = count($notifData);
             }
 
             // =========================================================================
@@ -367,7 +365,7 @@ if ($pembayaranSukses) {
                 CURLOPT_URL,
                 $firebaseDatabaseUrl .
                     "notifications/" .
-                    $notifIndex .
+                    $notifCount .
                     ".json"
             );
 
