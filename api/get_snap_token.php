@@ -4,7 +4,7 @@ header("Access-Control-Allow-Origin: *");
 header("Access-Control-Allow-Methods: POST");
 header("Access-Control-Allow-Headers: Content-Type, Authorization");
 
-// Menggunakan Server Key milikmu
+// Server Key Sandbox milikmu (Pastikan tidak ada spasi)
 $serverKey = "SB-Mid-server-H7PHMOW2JoVCx1cpm45RsNeQ";
 
 $json = file_get_contents('php://input');
@@ -38,7 +38,7 @@ $transaction_details = [
     'gross_amount' => $totalPrice,
 ];
 
-// 2. Detail Pelanggan (Formalitas)
+// 2. Detail Pelanggan
 $customer_details = [
     'first_name' => "Mahasiswa UMKT",
     'email' => "mahasiswa@umkt.ac.id"
@@ -61,17 +61,24 @@ curl_setopt($ch, CURLOPT_POSTFIELDS, $payload);
 curl_setopt($ch, CURLOPT_HTTPHEADER, [
     "Content-Type: application/json",
     "Accept: application/json",
-    "Authorization: Basic " . base64_encode($serverKey . ":")
+    // PERBAIKAN UTAMA: Tambahkan trim agar tidak ada spasi gaib di Server Key
+    "Authorization: Basic " . base64_encode(trim($serverKey) . ":")
 ]);
 
 $response = curl_exec($ch);
 $httpCode = curl_getinfo($ch, CURLINFO_HTTP_CODE);
 curl_close($ch);
 
-// JIKA terjadi error HTTP dari Midtrans (misal Server Key Salah, responnya kode 401 atau 400)
+$midtransData = json_decode($response, true);
+
 if ($httpCode !== 201 && $httpCode !== 200) {
-    $errorMsg = json_decode($response, true);
-    $detailError = isset($errorMsg['error_messages'][0]) ? $errorMsg['error_messages'][0] : "Otorisasi ditolak / Parameter salah.";
+    // 🛠️ JIKA GAGAL: Langsung bongkar error aslinya dari Midtrans biar kelihatan di Toast Android!
+    $detailError = "Otorisasi ditolak / Parameter salah.";
+    if (isset($midtransData['error_messages'])) {
+        $detailError = implode(", ", $midtransData['error_messages']);
+    } elseif (isset($midtransData['message'])) {
+        $detailError = $midtransData['message'];
+    }
     
     echo json_encode([
         "status" => "error",
@@ -79,7 +86,12 @@ if ($httpCode !== 201 && $httpCode !== 200) {
         "message" => "Midtrans Error ($httpCode): " . $detailError
     ]);
 } else {
-    // Sukses, kembalikan response token asli dari Midtrans ke Android
-    echo $response;
+    // 🛠️ JIKA SUKSES: Kirim format json rapi yang bisa dibaca Android
+    echo json_encode([
+        "status" => "success",
+        "token" => isset($midtransData['token']) ? $midtransData['token'] : "",
+        "redirect_url" => isset($midtransData['redirect_url']) ? $midtransData['redirect_url'] : "",
+        "message" => "Token berhasil dibuat."
+    ]);
 }
 ?>
