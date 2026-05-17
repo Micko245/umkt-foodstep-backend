@@ -139,6 +139,14 @@ if ($pembayaranSukses) {
             // STEP 2 : SIMPAN ORDER
             // =========================================================================
 
+            // 🛠️ PERBAIKAN: Cek field 'order_note' (Android) atau fallback ke 'note'
+            $catatanPesanan = "";
+            if (isset($pendingData['order_note'])) {
+                $catatanPesanan = $pendingData['order_note'];
+            } elseif (isset($pendingData['note'])) {
+                $catatanPesanan = $pendingData['note'];
+            }
+
             $newOrder = [
 
                 "id" => $orderId,
@@ -160,10 +168,8 @@ if ($pembayaranSukses) {
                 "total" =>
                     (int)$pendingData['total'],
 
-                "note" =>
-                    isset($pendingData['note'])
-                        ? $pendingData['note']
-                        : "",
+                // Menggunakan variabel catatan yang sudah disinkronkan dengan Android
+                "note" => $catatanPesanan,
 
                 "pickup_code" =>
                     $pendingData['pickup_code'],
